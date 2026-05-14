@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createAccounts, type Account } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -108,6 +109,7 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
   const [method, setMethod] = useState<ImportMethod>("menu");
   const [tokenInput, setTokenInput] = useState("");
   const [sessionInput, setSessionInput] = useState("");
+  const [proxyInput, setProxyInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingCpaImport, setPendingCpaImport] = useState<PendingCpaImport | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -119,6 +121,7 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
     setMethod("menu");
     setTokenInput("");
     setSessionInput("");
+    setProxyInput("");
     setPendingCpaImport(null);
     setConfirmOpen(false);
   };
@@ -140,7 +143,7 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
 
     setIsSubmitting(true);
     try {
-      const data = await createAccounts(normalizedTokens);
+      const data = await createAccounts(normalizedTokens, proxyInput.trim() || undefined);
       onImported(data.items);
       setOpen(false);
       resetState();
@@ -151,8 +154,9 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
           `${successText ?? "导入完成"}，新增 ${data.added ?? 0} 个，已刷新 ${data.refreshed ?? 0} 个，失败 ${data.errors?.length ?? 0} 个${firstError ? `，首个错误：${firstError}` : ""}`,
         );
       } else {
+        const proxyText = proxyInput.trim() ? "（已绑定代理）" : "";
         toast.success(
-          `${successText ?? "导入完成"}，新增 ${data.added ?? 0} 个，跳过 ${data.skipped ?? 0} 个重复项，已自动刷新账号信息`,
+          `${successText ?? "导入完成"}，新增 ${data.added ?? 0} 个，跳过 ${data.skipped ?? 0} 个重复项${proxyText}，已自动刷新账号信息`,
         );
       }
     } catch (error) {
@@ -284,6 +288,18 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
               className="min-h-56 resize-none rounded-xl border-stone-200"
             />
           </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-700">代理配置（可选）</label>
+            <Input
+              value={proxyInput}
+              onChange={(event) => setProxyInput(event.target.value)}
+              placeholder="http://user:pass@host:port 或 socks5://user:pass@host:port"
+              className="h-11 rounded-xl border-stone-200"
+            />
+            <p className="text-xs text-stone-500">
+              如果配置了代理，导入时将直接绑定代理，后续所有请求都会通过该代理。不配置则使用全局代理或直连。
+            </p>
+          </div>
           <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
@@ -353,6 +369,18 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
               className="min-h-56 resize-none rounded-xl border-stone-200 font-mono text-xs"
             />
           </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-700">代理配置（可选）</label>
+            <Input
+              value={proxyInput}
+              onChange={(event) => setProxyInput(event.target.value)}
+              placeholder="http://user:pass@host:port 或 socks5://user:pass@host:port"
+              className="h-11 rounded-xl border-stone-200"
+            />
+            <p className="text-xs text-stone-500">
+              如果配置了代理，导入时将直接绑定代理，后续所有请求都会通过该代理。不配置则使用全局代理或直连。
+            </p>
+          </div>
         </div>
       );
     }
@@ -399,6 +427,18 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
               {pendingCpaImport.errorCount > 0 ? `，另有 ${pendingCpaImport.errorCount} 个文件未提取成功` : ""}。
             </div>
           ) : null}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-700">代理配置（可选）</label>
+            <Input
+              value={proxyInput}
+              onChange={(event) => setProxyInput(event.target.value)}
+              placeholder="http://user:pass@host:port 或 socks5://user:pass@host:port"
+              className="h-11 rounded-xl border-stone-200"
+            />
+            <p className="text-xs text-stone-500">
+              如果配置了代理，导入时将直接绑定代理，后续所有请求都会通过该代理。不配置则使用全局代理或直连。
+            </p>
+          </div>
         </div>
       );
     }
@@ -475,10 +515,10 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
               {method === "menu"
                 ? "选择一种导入方式。导入成功后会自动拉取邮箱、类型和额度。"
                 : method === "token"
-                  ? "支持手动粘贴或从 TXT 文件导入，一行一个 Token。"
+                  ? "支持手动粘贴或从 TXT 文件导入，一行一个 Token。可配置代理直接绑定。"
                   : method === "session"
-                    ? "粘贴完整 Session JSON，系统会自动提取 accessToken。"
-                    : "支持一次读取多个本地 JSON 文件，并在提交前做数量确认。"}
+                    ? "粘贴完整 Session JSON，系统会自动提取 accessToken。可配置代理直接绑定。"
+                    : "支持一次读取多个本地 JSON 文件，并在提交前做数量确认。可配置代理直接绑定。"}
             </DialogDescription>
           </DialogHeader>
 

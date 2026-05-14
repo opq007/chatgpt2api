@@ -15,6 +15,7 @@ from api.support import (
 )
 from services.account_service import account_service
 from services.cpa_service import cpa_config, cpa_import_service, list_remote_files
+from services.proxy_service import test_proxy
 from services.sub2api_service import (
     list_remote_accounts as sub2api_list_remote_accounts,
     list_remote_groups as sub2api_list_remote_groups,
@@ -36,6 +37,7 @@ class UserKeyUpdateRequest(BaseModel):
 
 class AccountCreateRequest(BaseModel):
     tokens: list[str] = Field(default_factory=list)
+    proxy: str | None = None
 
 
 class AccountDeleteRequest(BaseModel):
@@ -51,6 +53,12 @@ class AccountUpdateRequest(BaseModel):
     type: str | None = None
     status: str | None = None
     quota: int | None = None
+    proxy: str | None = None
+
+
+class AccountProxyTestRequest(BaseModel):
+    access_token: str = ""
+    proxy: str = ""
 
 
 class CPAPoolCreateRequest(BaseModel):
@@ -152,8 +160,16 @@ def create_router() -> APIRouter:
         tokens = [str(token or "").strip() for token in body.tokens if str(token or "").strip()]
         if not tokens:
             raise HTTPException(status_code=400, detail={"error": "tokens is required"})
-        result = account_service.add_accounts(tokens)
-        refresh_result = account_service.refresh_accounts(tokens)
+        
+        proxy = str(body.proxy or "").strip() if body.proxy else None
+        
+        result = account_service.add_accounts(tokens, proxy=proxy)
+        
+        if proxy:
+            refresh_result = account_service.refresh_accounts(tokens)
+        else:
+            refresh_result = {"refreshed": 0, "errors": [], "items": result.get("items", [])}
+        
         return {
             **result,
             "refreshed": refresh_result.get("refreshed", 0),
@@ -185,13 +201,22 @@ def create_router() -> APIRouter:
         access_token = str(body.access_token or "").strip()
         if not access_token:
             raise HTTPException(status_code=400, detail={"error": "access_token is required"})
-        updates = {key: value for key, value in {"type": body.type, "status": body.status, "quota": body.quota}.items() if value is not None}
+        updates = {key: value for key, value in {"type": body.type, "status": body.status, "quota": body.quota, "proxy": body.proxy}.items() if value is not None}
         if not updates:
             raise HTTPException(status_code=400, detail={"error": "还没有检测到改动，请修改后再保存"})
         account = account_service.update_account(access_token, updates)
         if account is None:
             raise HTTPException(status_code=404, detail={"error": "account not found"})
         return {"item": account, "items": account_service.list_accounts()}
+
+    @router.post("/api/accounts/test-proxy")
+    async def test_account_proxy(body: AccountProxyTestRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        proxy = str(body.proxy or "").strip()
+        if not proxy:
+            raise HTTPException(status_code=400, detail={"error": "proxy is required"})
+        result = await run_in_threadpool(test_proxy, proxy)
+        return {"result": result}
 
     @router.get("/api/cpa/pools")
     async def list_cpa_pools(authorization: str | None = Header(default=None)):

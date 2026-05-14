@@ -52,26 +52,30 @@ class OpenAIBackendAPI:
     - 协议兼容转换放在 `services.protocol`
     """
 
-    def __init__(self, access_token: str = "") -> None:
-        """初始化后端客户端。
-
-        参数：
-        - `access_token`：可选。传入后表示使用已登录链路；不传则使用未登录链路。
-        """
+    def __init__(self, access_token: str = "", account_proxy: str = "") -> None:
         self.base_url = "https://chatgpt.com"
         self.client_version = DEFAULT_CLIENT_VERSION
         self.client_build_number = DEFAULT_CLIENT_BUILD_NUMBER
         self.access_token = access_token
+        self.account_proxy = account_proxy
         self.fp = self._build_fp()
         self.user_agent = self.fp["user-agent"]
         self.device_id = self.fp["oai-device-id"]
         self.session_id = self.fp["oai-session-id"]
         self.pow_script_sources: list[str] = []
         self.pow_data_build = ""
-        self.session = requests.Session(**proxy_settings.build_session_kwargs(
-            impersonate=self.fp["impersonate"],
-            verify=True,
-        ))
+        
+        session_kwargs = {
+            "impersonate": self.fp["impersonate"],
+            "verify": True,
+        }
+        
+        if self.account_proxy:
+            session_kwargs["proxy"] = self.account_proxy
+        else:
+            session_kwargs.update(proxy_settings.build_session_kwargs())
+        
+        self.session = requests.Session(**session_kwargs)
         self.session.headers.update({
             "User-Agent": self.user_agent,
             "Origin": self.base_url,

@@ -67,6 +67,7 @@ class AccountService:
         normalized["success"] = int(normalized.get("success") or 0)
         normalized["fail"] = int(normalized.get("fail") or 0)
         normalized["last_used_at"] = normalized.get("last_used_at")
+        normalized["proxy"] = str(normalized.get("proxy") or "").strip()
         return normalized
 
     def list_tokens(self) -> list[str]:
@@ -192,7 +193,7 @@ class AccountService:
                    and (token := item.get("access_token") or "")
             ]
 
-    def add_accounts(self, tokens: list[str]) -> dict:
+    def add_accounts(self, tokens: list[str], proxy: str | None = None) -> dict:
         tokens = list(dict.fromkeys(token for token in tokens if token))
         if not tokens:
             return {"added": 0, "skipped": 0, "items": self.list_accounts()}
@@ -212,6 +213,7 @@ class AccountService:
                         **current,
                         "access_token": access_token,
                         "type": str(current.get("type") or "free"),
+                        "proxy": proxy if proxy else current.get("proxy"),
                     }
                 )
                 if account is not None:
@@ -303,7 +305,9 @@ class AccountService:
 
         try:
             from services.openai_backend_api import InvalidAccessTokenError, OpenAIBackendAPI
-            result = OpenAIBackendAPI(access_token).get_user_info()
+            account = self.get_account(access_token)
+            account_proxy = account.get("proxy") if account else ""
+            result = OpenAIBackendAPI(access_token, account_proxy).get_user_info()
         except InvalidAccessTokenError:
             self.remove_invalid_token(access_token, event)
             raise

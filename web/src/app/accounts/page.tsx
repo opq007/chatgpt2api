@@ -44,6 +44,7 @@ import {
   deleteAccounts,
   fetchAccounts,
   refreshAccounts,
+  testAccountProxy,
   updateAccount,
   type Account,
   type AccountStatus,
@@ -175,10 +176,13 @@ function AccountsPageContent() {
   const [pageSize, setPageSize] = useState("10");
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editStatus, setEditStatus] = useState<AccountStatus>("正常");
+  const [editProxy, setEditProxy] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isTestingProxy, setIsTestingProxy] = useState(false);
+  const [proxyTestResult, setProxyTestResult] = useState<{ ok: boolean; status: number; latency_ms: number; error: string | null } | null>(null);
 
   const loadAccounts = async (silent = false) => {
     if (!silent) {
@@ -316,6 +320,8 @@ function AccountsPageContent() {
   const openEditDialog = (account: Account) => {
     setEditingAccount(account);
     setEditStatus(account.status);
+    setEditProxy(account.proxy || "");
+    setProxyTestResult(null);
   };
 
   const handleUpdateAccount = async () => {
@@ -327,6 +333,7 @@ function AccountsPageContent() {
     try {
       const data = await updateAccount(editingAccount.access_token, {
         status: editStatus,
+        proxy: editProxy.trim() || undefined,
       });
       setAccounts(data.items);
       setSelectedIds((prev) => prev.filter((id) => data.items.some((item) => item.access_token === id)));
@@ -337,6 +344,31 @@ function AccountsPageContent() {
       toast.error(message);
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleTestProxy = async () => {
+    if (!editingAccount || !editProxy.trim()) {
+      toast.error("请先输入代理地址");
+      return;
+    }
+
+    setIsTestingProxy(true);
+    setProxyTestResult(null);
+    try {
+      const data = await testAccountProxy(editingAccount.access_token, editProxy.trim());
+      setProxyTestResult(data.result);
+      if (data.result.ok) {
+        toast.success(`代理测试成功，延迟 ${data.result.latency_ms}ms`);
+      } else {
+        toast.error(`代理测试失败：${data.result.error || "未知错误"}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "代理测试失败";
+      toast.error(message);
+      setProxyTestResult({ ok: false, status: 0, latency_ms: 0, error: message });
+    } finally {
+      setIsTestingProxy(false);
     }
   };
 
@@ -402,7 +434,7 @@ function AccountsPageContent() {
           <DialogHeader className="gap-2">
             <DialogTitle>编辑账户</DialogTitle>
             <DialogDescription className="text-sm leading-6">
-              手动修改账号状态。
+              手动修改账号状态和代理配置。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -422,6 +454,40 @@ function AccountsPageContent() {
                     ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-stone-700">代理配置</label>
+              <div className="flex gap-2">
+                <Input
+                  value={editProxy}
+                  onChange={(e) => setEditProxy(e.target.value)}
+                  placeholder="http://user:pass@host:port 或 socks5://user:pass@host:port"
+                  className="h-11 rounded-xl border-stone-200 bg-white"
+                />
+                <Button
+                  variant="outline"
+                  className="h-11 shrink-0 rounded-xl border-stone-200 bg-white/80 px-4 text-stone-700 hover:bg-white"
+                  onClick={() => void handleTestProxy()}
+                  disabled={isTestingProxy || !editProxy.trim()}
+                >
+                  {isTestingProxy ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                  测试
+                </Button>
+              </div>
+              {proxyTestResult && (
+                <div
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-xs",
+                    proxyTestResult.ok ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700",
+                  )}
+                >
+                  {proxyTestResult.ok ? (
+                    <span>✓ 代理可用，延迟 {proxyTestResult.latency_ms}ms</span>
+                  ) : (
+                    <span>✗ 代理不可用：{proxyTestResult.error || "连接失败"}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="pt-2">
@@ -604,6 +670,7 @@ function AccountsPageContent() {
                     <th className="w-56 px-4 py-3">账号信息</th>
                     <th className="w-24 px-4 py-3">额度</th>
                     <th className="w-40 px-4 py-3">恢复时间</th>
+                    <th className="w-32 px-4 py-3">代理</th>
                     <th className="w-18 px-4 py-3">成功</th>
                     <th className="w-18 px-4 py-3">失败</th>
                     <th className="w-24 px-4 py-3">操作</th>
@@ -680,6 +747,15 @@ function AccountsPageContent() {
                               </div>
                             );
                           })()}
+                        </td>
+                        <td className="px-4 py-3">
+                          {account.proxy ? (
+                            <Badge variant="secondary" className="rounded-md bg-blue-50 text-blue-700">
+                              {account.proxy.length > 20 ? `${account.proxy.slice(0, 20)}...` : account.proxy}
+                            </Badge>
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-stone-500">{account.success}</td>
                         <td className="px-4 py-3 text-stone-500">{account.fail}</td>

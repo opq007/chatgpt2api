@@ -475,7 +475,10 @@ def conversation_events(
 
 
 def text_backend() -> OpenAIBackendAPI:
-    return OpenAIBackendAPI(access_token=account_service.get_text_access_token())
+    token = account_service.get_text_access_token()
+    account = account_service.get_account(token) if token else None
+    account_proxy = account.get("proxy") if account else ""
+    return OpenAIBackendAPI(access_token=token, account_proxy=account_proxy)
 
 
 def stream_text_deltas(backend: OpenAIBackendAPI, request: ConversationRequest) -> Iterator[str]:
@@ -605,7 +608,9 @@ def stream_image_outputs_with_pool(request: ConversationRequest) -> Iterator[Ima
             returned_message = False
             returned_result = False
             try:
-                backend = OpenAIBackendAPI(access_token=token)
+                account = account_service.get_account(token)
+                account_proxy = account.get("proxy") if account else ""
+                backend = OpenAIBackendAPI(access_token=token, account_proxy=account_proxy)
                 for output in stream_image_outputs(backend, request, index, request.n):
                     if output.kind == "message" and request.message_as_error:
                         raise ImageGenerationError(
